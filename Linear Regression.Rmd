@@ -77,3 +77,9 @@ boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement")
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
+# Model Building
+#### Linear model
+```{r}
+
+```
+
