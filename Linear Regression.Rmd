@@ -1,15 +1,17 @@
 ---
-title: "EDA"
-author: "Jiayi Shen"
-date: "3/25/2019"
+title: "Linear Regression"
+author: "Jieqi Tu (jt3098)"
+date: "3/26/2019"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(caret) #featurePlot
+library(caret)
 ```
+
+### Linear Regression
 
 #Load and tidy data
 ```{r}
@@ -42,7 +44,7 @@ y <- housing$price
 
 # matrix of continuous predictors 
 housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
-x_continuous <- model.matrix(price~., housing_continous)[,-1]
+x_countinuous <- model.matrix(price~., housing_continous)[,-1]
 
 # set up the theme of plotting
 theme1 <- trellis.par.get()   
@@ -73,10 +75,5 @@ boxplot(price~view, data=housing_binary, ylab = "Price", xlab ="View")
 boxplot(price~waterfront, data=housing_binary, ylab = "Price", xlab ="waterfront") 
 boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement") 
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
-```
-
-#Split the data into training / testing sets
-```{r}
-
 ```
 
