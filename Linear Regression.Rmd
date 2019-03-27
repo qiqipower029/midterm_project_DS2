@@ -9,6 +9,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(caret)
+library(glmnet)
 ```
 
 ### Linear Regression
@@ -44,7 +45,7 @@ y <- housing$price
 
 # matrix of continuous predictors 
 housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
-x_countinuous <- model.matrix(price~., housing_continous)[,-1]
+x_continuous <- model.matrix(price~., housing_continous)[,-1]
 
 # set up the theme of plotting
 theme1 <- trellis.par.get()   
@@ -79,7 +80,71 @@ boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated")
 
 # Model Building
 #### Linear model
-```{r}
+```{r least square model}
+# build a least-square linear model
+model_ls = lm(housing_binary$price~., data = housing_binary)
+summary(model_ls)
+```
 
+```{r ridge regression model}
+# prepare the design matrix
+x = model.matrix(price~., housing)[,-1]
+
+# build a ridge model using glmnet function
+model_ridge = glmnet(x, y, alpha = 0, lambda = exp(seq(-1, 15, length = 100)))
+
+# check the coefficient matrix of the ridge model
+coef(model_ridge)
+
+# use cross-validation to find the optimal lambda value for the ridge model
+set.seed(1)
+cv.ridge = cv.glmnet(x, y,
+                     alpha = 0,
+                     lambda = exp(seq(-1, 15, length = 100)),
+                     type.measure = "mse")
+par(mfrow = c(1, 1))
+plot(cv.ridge)
+
+
+# generate the trace plot
+plot(model_ridge, xvar = "lambda", label = T)
+
+# obtain the optimal lambda value
+best.lambda = cv.ridge$lambda.min; best.lambda
+
+# obtain the predicted coefficients
+predict(model_ridge, s = best.lambda, type = "coefficients")
+```
+
+```{r lasso regression model}
+# use cross-validation to find the optimal lambda value for lasso regression model
+set.seed(1)
+cv.lasso = cv.glmnet(x, y, alpha = 1, lambda = exp(seq(-1, 15, length = 100)))
+cv.lasso$lambda.min
+
+plot(cv.lasso)
+
+# plot the result
+plot(cv.lasso$glmnet.fit, xvar = "lambda", label = T)
+
+# obtain the predicted coefficients
+predict(cv.lasso, s = "lambda.min", type = "coefficients")
+```
+
+```{r}
+ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
+set.seed(1)
+# fit a ridge model using caret package
+ridge.fit = train(x, y,
+                  method = "glmnet",
+                  tuneGrid = expand.grid(alpha = 0,
+                                         lambda = exp(seq(-1, 15, length = 100))),
+                  trControl = ctrl1)
+
+# plot the RMSE by log(lambda)
+plot(ridge.fit, xTrans = function(x) log(x))
+
+# find the optimal lambda
+ridge.fit$bestTune
 ```
 
