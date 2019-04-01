@@ -33,18 +33,9 @@ housing =
   mutate(view = ifelse(view == 0, 0, 1),
          basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated)
+  select(-sqft_basement, -yr_renovated) %>% 
+  filter(view == 1 & bedrooms < 30)
 ```
-
-- Abnormality:
-1. `bedrooms` = 33.
-```{r}
-housing = housing %>% filter(bedrooms < 30)
-#compare this observation with the one with maximum price. 
-housing %>% filter(price == 7700000)
-#seems to be an abnormal entry.
-```
-
 
 #Exploratory data analysis
 ## Continuous variables
@@ -68,8 +59,6 @@ trellis.par.set(theme1)
 featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
             type = c("p"), layout = c(3, 4))
 ```
-
-
 
 
 ## Binary variables
@@ -144,6 +133,21 @@ gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+
 smooth function can only be applied to continuous variables here. 
 because 'A term has fewer unique covariate combinations than specified maximum degrees of freedom'
 
+## GAM using `caret`
+```{r}
+ctrl1 <- trainControl(method = "cv", number = 10)
+
+set.seed(20)
+gam.fit.caret <- train(x, y,
+                 method = "gam",
+                 tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
+                 trControl = ctrl1)
+
+gam.fit.caret$bestTune
+
+gam.fit.caret$finalModel
+```
+
 
 ## Multivariate Adaptive Regression Splines (MARS)
 We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
@@ -171,12 +175,20 @@ mars.fit$bestTune
 coef(mars.fit$finalModel) 
 ```
 
+The final MARS model retained 7 predictors and 4 interaction terms. The predictors are: `sqft_living`, `grade`, `yr_built`, `sqft_living15`, `sqft_living`, `waterfront`, and `sqft_lot15`. Based on this MARS model, `sqft_living` seems to have interaction with `waterfront`, `grade` and `sqft_lot`. 
+
+
 partial dependence plots (PDPs)
 ```{r}
-p1 <- partial(mars.fit, pred.var = c("lcavol"), grid.resolution = 10) %>% autoplot()
+p1 <- partial(mars.fit, pred.var = c("sqft_living"), grid.resolution = 10) %>% autoplot()
+p2 <- partial(mars.fit, pred.var = c("grade"), grid.resolution = 10) %>% autoplot()
+p3 <- partial(mars.fit, pred.var = c("yr_built"), grid.resolution = 10) %>% autoplot()
+p4 <- partial(mars.fit, pred.var = c("sqft_lot"), grid.resolution = 10) %>% autoplot()
+grid.arrange(p1, p2,p3, p4, ncol = 2)
 
-p2 <- partial(mars.fit, pred.var = c("lcavol", "lweight"), grid.resolution = 10) %>% plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
+
+
+p2 <- partial(mars.fit, pred.var = c("sqft_living", "sqft_lot"), grid.resolution = 10) %>% plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
             screen = list(z = 20, x = -60))
 
-grid.arrange(p1, p2, ncol = 2)
 ```
