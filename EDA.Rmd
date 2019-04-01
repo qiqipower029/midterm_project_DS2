@@ -42,6 +42,7 @@ housing =
 ```{r}
 # vector of response
 y <- housing$price
+x <- model.matrix(price~.,housing)[,-1]
 
 # matrix of continuous predictors 
 housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
@@ -79,6 +80,7 @@ boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated")
 
 linear models
 ```{r}
+ctrl1 <- trainControl(method = "cv", number = 10)
 lm.fit <- train(x,y, method = "lm", trControl = ctrl1)
 summary(lm.fit)
 ```
@@ -165,7 +167,7 @@ mars_grid <- expand.grid(degree = 1:2,
                          nprune = 2:15)
 
 set.seed(20)
-x <- model.matrix(price~.,housing)[,-1]
+
 mars.fit <- train(x, y,
                  method = "earth",
                  tuneGrid = mars_grid,
