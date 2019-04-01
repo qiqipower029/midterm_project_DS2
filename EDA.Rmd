@@ -28,13 +28,13 @@ str(rawdata)
 
 ```{r}
 #clean the rawdata; create a tidied dataset for analysis and modelling.
+#subset data: only those with view >0.
 housing = 
   rawdata %>% select(-id, -date, -zipcode, -lat, -long) %>% 
-  mutate(view = ifelse(view == 0, 0, 1),
-         basement = ifelse(sqft_basement == 0, 0, 1),
+  filter(view > 0 & bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated) %>% 
-  filter(view == 1 & bedrooms < 30)
+  select(-sqft_basement, -yr_renovated, -view) 
 ```
 
 #Exploratory data analysis
@@ -65,20 +65,23 @@ featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
 ```{r}
 # dataframe of binary predictors 
 housing_binary = housing %>% 
-  select(c(price,view, waterfront, basement, renovated )) %>%
-  mutate(view = as.factor(view),
-         waterfront = as.factor(waterfront),
+  select(c(price, waterfront, basement, renovated )) %>%
+  mutate(waterfront = as.factor(waterfront),
          basement = as.factor(basement),
          renovated = as.factor(renovated)) 
 
 # boxplots
 par(mfrow = c(2, 2))
-boxplot(price~view, data=housing_binary, ylab = "Price", xlab ="View") 
 boxplot(price~waterfront, data=housing_binary, ylab = "Price", xlab ="waterfront") 
 boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement") 
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
+linear models
+```{r}
+lm.fit <- train(x,y, method = "lm", trControl = ctrl1)
+summary(lm.fit)
+```
 
 
 # Non-linear models
@@ -126,7 +129,7 @@ gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+
                  yr_built+ s(sqft_living15)+ floors+ 
                  condition+ bedrooms+ bathrooms+ 
                  s(sqft_living) + s(sqft_lot) +
-                 view + waterfront+ basement+ renovated, 
+                  waterfront+ basement+ renovated, 
                  data = housing)
 ```
   
@@ -175,7 +178,7 @@ mars.fit$bestTune
 coef(mars.fit$finalModel) 
 ```
 
-The final MARS model retained 7 predictors and 4 interaction terms. The predictors are: `sqft_living`, `grade`, `yr_built`, `sqft_living15`, `sqft_living`, `waterfront`, and `sqft_lot15`. Based on this MARS model, `sqft_living` seems to have interaction with `waterfront`, `grade` and `sqft_lot`. 
+The final MARS model retained 6 predictors and no interaction term. The predictors are: `sqft_living`, `grade`, `yr_built`, `sqft_living15`, `waterfront`, and `sqft_lot15`. 
 
 
 partial dependence plots (PDPs)
@@ -183,12 +186,8 @@ partial dependence plots (PDPs)
 p1 <- partial(mars.fit, pred.var = c("sqft_living"), grid.resolution = 10) %>% autoplot()
 p2 <- partial(mars.fit, pred.var = c("grade"), grid.resolution = 10) %>% autoplot()
 p3 <- partial(mars.fit, pred.var = c("yr_built"), grid.resolution = 10) %>% autoplot()
-p4 <- partial(mars.fit, pred.var = c("sqft_lot"), grid.resolution = 10) %>% autoplot()
-grid.arrange(p1, p2,p3, p4, ncol = 2)
-
-
-
-p2 <- partial(mars.fit, pred.var = c("sqft_living", "sqft_lot"), grid.resolution = 10) %>% plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
-            screen = list(z = 20, x = -60))
+p4 <- partial(mars.fit, pred.var = c("sqft_living15"), grid.resolution = 10) %>% autoplot()
+p5 <- partial(mars.fit, pred.var = c("sqft_lot15"), grid.resolution = 10) %>% autoplot()
+grid.arrange(p1, p2,p3, p4, p5, ncol = 2)
 
 ```
