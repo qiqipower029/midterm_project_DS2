@@ -8,6 +8,7 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(mgcv)
 library(caret) #featurePlot
 ```
 
@@ -24,6 +25,7 @@ str(rawdata)
   The cleaned dataset to be used in this project include one response variable `price` and additional 15 variables.  
   `view`, `sqft_basement` and `yr_renovated` are continuous or integer variables in the original dataset. For the purpose of easy interpretation in later modelling, we convert these variables to be binary. Then these variables indicate whether the house has been viewed by potential buyers, whether the house has basement or not and whether the house has been renovated or not, respectively.  
 
+
 ```{r}
 #clean the rawdata; create a tidied dataset for analysis and modelling.
 housing = 
@@ -33,6 +35,16 @@ housing =
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
   select(-sqft_basement, -yr_renovated)
 ```
+
+- Abnormality:
+1. `bedrooms` = 33.
+```{r}
+housing = housing %>% filter(bedrooms < 30)
+#compare this observation with the one with maximum price. 
+housing %>% filter(price == 7700000)
+#seems to be an abnormal entry.
+```
+
 
 #Exploratory data analysis
 ## Continuous variables
@@ -57,6 +69,9 @@ featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
             type = c("p"), layout = c(3, 4))
 ```
 
+
+
+
 ## Binary variables
 ```{r}
 # dataframe of binary predictors 
@@ -75,8 +90,93 @@ boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement")
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
-#Split the data into training / testing sets
+
+
+# Non-linear models
+## Polynomial Regression
 ```{r}
+# select optimal polynomial degree through ANOVA
+poly1 <- lm(price~bedrooms, data = housing)
+poly2 <- lm(price~poly(bedrooms,2), data = housing) 
+poly3 <- lm(price~poly(bedrooms,3), data = housing) 
+poly4 <- lm(price~poly(bedrooms,4), data = housing) 
+poly5 <- lm(price~poly(bedrooms,5), data = housing) 
+anova(poly1, poly2, poly3, poly4, poly5)
+```
+
+
+```{r}
+# select optimal d through 10-fold CV
+ctrl1 <- trainControl(method = "cv", number = 10)
+
+set.seed(20)
+poly.cv1 <- caret::train(x= data.frame(housing$bedrooms),y,
+                method = "lm",
+                trControl = ctrl1)
+set.seed(20)
+poly.cv2 <- caret::train(x= data.frame(poly(housing$bedrooms,2)),y,
+                method = "lm",
+                trControl = ctrl1)
+set.seed(20)
+poly.cv3 <- caret::train(x= data.frame(poly(housing$bedrooms,3)),y,
+                method = "lm",
+                trControl = ctrl1)
+set.seed(20)
+poly.cv4 <- caret::train(x= data.frame(poly(housing$bedrooms,4)),y,
+                method = "lm",
+                trControl = ctrl1)
+
+resamp <- resamples(list( p1 = poly.cv1, p2 = poly.cv2, p3 = poly.cv3, p4 = poly.cv4))
+bwplot(resamp, metric = "RMSE")
 
 ```
 
+## GAM
+```{r}
+gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+ 
+                 yr_built+ s(sqft_living15)+ floors+ 
+                 condition+ bedrooms+ bathrooms+ 
+                 s(sqft_living) + s(sqft_lot) +
+                 view + waterfront+ basement+ renovated, 
+                 data = housing)
+```
+  
+smooth function can only be applied to continuous variables here. 
+because 'A term has fewer unique covariate combinations than specified maximum degrees of freedom'
+
+
+## Multivariate Adaptive Regression Splines (MARS)
+We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
+The MARS model building procedure automatically selects which variables to use (some variables are important, others not), the positions of the kinks in the hinge functions, and how the hinge functions are combined.  
+```{r}
+library(pdp)
+library(earth)
+
+# grid search for optimal hyperparameters
+# 2 tuning parameters in MARS: the degree of interactions and the number of retained terms
+mars_grid <- expand.grid(degree = 1:2, 
+                         nprune = 2:15)
+
+set.seed(20)
+x <- model.matrix(price~.,housing)[,-1]
+mars.fit <- train(x, y,
+                 method = "earth",
+                 tuneGrid = mars_grid,
+                 trControl = ctrl1)
+
+ggplot(mars.fit)
+
+mars.fit$bestTune
+
+coef(mars.fit$finalModel) 
+```
+
+partial dependence plots (PDPs)
+```{r}
+p1 <- partial(mars.fit, pred.var = c("lcavol"), grid.resolution = 10) %>% autoplot()
+
+p2 <- partial(mars.fit, pred.var = c("lcavol", "lweight"), grid.resolution = 10) %>% plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, 
+            screen = list(z = 20, x = -60))
+
+grid.arrange(p1, p2, ncol = 2)
+```
