@@ -203,6 +203,10 @@ bwplot(resamples(list(mars = mars.fit,
 
 
 ```{r comparison between all models}
+##############################################################
+## Loading Linear Regression.Rmd before runing this code chunk.
+##############################################################
+
 set.seed(1)
 resamp = resamples(list(lasso = lasso.fit, ridge = ridge.fit, 
                         lm = model_ls,
