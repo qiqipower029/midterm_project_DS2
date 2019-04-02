@@ -79,7 +79,8 @@ boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement")
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
-```{r}
+```{r correlation plot}
+par(mfrow = c(1, 1))
 corrplot::corrplot(cor(x))
 ```
 
@@ -96,9 +97,9 @@ anova(poly1, poly2, poly3, poly4, poly5)
 ```
 
 
-```{r}
+```{r polynomial}
 # select optimal d through 10-fold CV
-ctrl1 <- trainControl(method = "cv", number = 10)
+ctrl1 <-  trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 set.seed(1)
 poly.cv1 <- caret::train(x= data.frame(housing$bedrooms),y,
@@ -123,7 +124,7 @@ bwplot(resamp, metric = "RMSE")
 ```
 
 ## GAM
-```{r}
+```{r GAM using mgcv}
 gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+ 
                  yr_built+ s(sqft_living15)+ floors+ 
                  condition+ bedrooms+ bathrooms+ 
@@ -136,8 +137,8 @@ smooth function can only be applied to continuous variables here.
 because 'A term has fewer unique covariate combinations than specified maximum degrees of freedom'
 
 ## GAM using `caret`
-```{r}
-ctrl1 <- trainControl(method = "cv", number = 10)
+```{r GAM using caret}
+ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 set.seed(1)
 gam.fit.caret <- train(x, y,
@@ -156,7 +157,7 @@ gam.fit.caret$finalModel
 We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
 The MARS model building procedure automatically selects which variables to use (some variables are important, others not), the positions of the kinks in the hinge functions, and how the hinge functions are combined.  
   
-```{r}
+```{r MARS}
 library(pdp)
 library(earth)
 
@@ -166,7 +167,6 @@ mars_grid <- expand.grid(degree = 1:2,
                          nprune = 2:15)
 
 set.seed(1)
-
 mars.fit <- train(x, y,
                  method = "earth",
                  tuneGrid = mars_grid,
@@ -180,23 +180,35 @@ mars.fit$bestTune
 coef(mars.fit$finalModel) 
 ```
 
-The final MARS model retained 6 predictors and no interaction term. The predictors are: `sqft_living`, `grade`, `yr_built`, `sqft_living15`, `waterfront`, and `sqft_lot15`. 
+The final MARS model retained 7 predictors and no interaction term. The predictors are: `sqft_living`, `grade`,`condition`, `yr_built`, `sqft_living15`, `waterfront`, and `sqft_lot15`. 
 
 
-partial dependence plots (PDPs)
-```{r}
+Partial dependence plots (PDPs)
+```{r Partial dependence plots}
 p1 <- partial(mars.fit, pred.var = c("sqft_living"), grid.resolution = 10) %>% autoplot()
 p2 <- partial(mars.fit, pred.var = c("grade"), grid.resolution = 10) %>% autoplot()
 p3 <- partial(mars.fit, pred.var = c("yr_built"), grid.resolution = 10) %>% autoplot()
 p4 <- partial(mars.fit, pred.var = c("sqft_living15"), grid.resolution = 10) %>% autoplot()
 p5 <- partial(mars.fit, pred.var = c("sqft_lot15"), grid.resolution = 10) %>% autoplot()
-grid.arrange(p1, p2,p3, p4, p5, ncol = 2)
+p5 <- partial(mars.fit, pred.var = c("condition"), grid.resolution = 10) %>% autoplot()
+grid.arrange(p1, p2,p3, p4, p5,p6, ncol = 2)
 ```
 
 
-```{r}
+```{r comparison between non-linear models}
 bwplot(resamples(list(mars = mars.fit,
                       gam = gam.fit.caret)), 
        metric = "RMSE")
+```
+
+
+```{r comparison between all models}
+set.seed(1)
+resamp = resamples(list(lasso = lasso.fit, ridge = ridge.fit, 
+                        lm = model_ls,
+                        mars = mars.fit,
+                        gam = gam.fit.caret))
+summary(resamp)
+bwplot(resamp, metric = "RMSE")
 ```
 
