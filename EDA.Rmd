@@ -15,6 +15,7 @@ library(caret) #featurePlot
 #Load and tidy data
 ```{r}
 #read data
+
 rawdata <- read.csv("kc_house_data.csv", header = TRUE)
 
 #inspect the structure of data
@@ -78,13 +79,9 @@ boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement")
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
-linear models
 ```{r}
-ctrl1 <- trainControl(method = "cv", number = 10)
-lm.fit <- train(x,y, method = "lm", trControl = ctrl1)
-summary(lm.fit)
+corrplot::corrplot(cor(x))
 ```
-
 
 # Non-linear models
 ## Polynomial Regression
@@ -103,19 +100,19 @@ anova(poly1, poly2, poly3, poly4, poly5)
 # select optimal d through 10-fold CV
 ctrl1 <- trainControl(method = "cv", number = 10)
 
-set.seed(20)
+set.seed(1)
 poly.cv1 <- caret::train(x= data.frame(housing$bedrooms),y,
                 method = "lm",
                 trControl = ctrl1)
-set.seed(20)
+set.seed(1)
 poly.cv2 <- caret::train(x= data.frame(poly(housing$bedrooms,2)),y,
                 method = "lm",
                 trControl = ctrl1)
-set.seed(20)
+set.seed(1)
 poly.cv3 <- caret::train(x= data.frame(poly(housing$bedrooms,3)),y,
                 method = "lm",
                 trControl = ctrl1)
-set.seed(20)
+set.seed(1)
 poly.cv4 <- caret::train(x= data.frame(poly(housing$bedrooms,4)),y,
                 method = "lm",
                 trControl = ctrl1)
@@ -142,10 +139,11 @@ because 'A term has fewer unique covariate combinations than specified maximum d
 ```{r}
 ctrl1 <- trainControl(method = "cv", number = 10)
 
-set.seed(20)
+set.seed(1)
 gam.fit.caret <- train(x, y,
                  method = "gam",
                  tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
+                 #preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
 gam.fit.caret$bestTune
@@ -157,6 +155,7 @@ gam.fit.caret$finalModel
 ## Multivariate Adaptive Regression Splines (MARS)
 We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
 The MARS model building procedure automatically selects which variables to use (some variables are important, others not), the positions of the kinks in the hinge functions, and how the hinge functions are combined.  
+  
 ```{r}
 library(pdp)
 library(earth)
@@ -166,11 +165,12 @@ library(earth)
 mars_grid <- expand.grid(degree = 1:2, 
                          nprune = 2:15)
 
-set.seed(20)
+set.seed(1)
 
 mars.fit <- train(x, y,
                  method = "earth",
                  tuneGrid = mars_grid,
+                 #preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
 ggplot(mars.fit)
@@ -191,5 +191,12 @@ p3 <- partial(mars.fit, pred.var = c("yr_built"), grid.resolution = 10) %>% auto
 p4 <- partial(mars.fit, pred.var = c("sqft_living15"), grid.resolution = 10) %>% autoplot()
 p5 <- partial(mars.fit, pred.var = c("sqft_lot15"), grid.resolution = 10) %>% autoplot()
 grid.arrange(p1, p2,p3, p4, p5, ncol = 2)
-
 ```
+
+
+```{r}
+bwplot(resamples(list(mars = mars.fit,
+                      gam = gam.fit.caret)), 
+       metric = "RMSE")
+```
+
