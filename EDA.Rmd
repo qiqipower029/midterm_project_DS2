@@ -208,11 +208,9 @@ bwplot(resamples(list(mars = mars.fit,
 ##############################################################
 
 set.seed(1)
-resamp = resamples(list(lasso = lasso.fit, ridge = ridge.fit, 
-                        lm = model_ls,
-                        mars = mars.fit,
-                        gam = gam.fit.caret))
-summary(resamp)
-bwplot(resamp, metric = "RMSE")
+resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
+                        mars = mars.fit, gam = gam.fit.caret))
+summary(resamp.all)
+bwplot(resamp.all, metric = "RMSE")
 ```
 
