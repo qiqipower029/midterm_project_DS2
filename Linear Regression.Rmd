@@ -5,14 +5,6 @@ date: "3/26/2019"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
-library(caret)
-library(glmnet)
-```
-
-### Linear Regression
 
 #Load and tidy data
 ```{r}
@@ -29,13 +21,13 @@ str(rawdata)
 
 ```{r}
 #clean the rawdata; create a tidied dataset for analysis and modelling.
+#subset data: only those with view >0.
 housing = 
   rawdata %>% select(-id, -date, -zipcode, -lat, -long) %>% 
-  mutate(view = ifelse(view == 0, 0, 1),
-         basement = ifelse(sqft_basement == 0, 0, 1),
+  filter(view > 0 & bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated) %>% 
-  filter(view == 1 & bedrooms < 30)
+  select(-sqft_basement, -yr_renovated, -view) 
 ```
 
 #Exploratory data analysis
@@ -43,9 +35,6 @@ housing =
 ```{r}
 # vector of response
 y <- housing$price
-
-# design matrix
-x = model.matrix(price~., housing)[,-1]
 
 # matrix of continuous predictors 
 housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
@@ -63,6 +52,7 @@ trellis.par.set(theme1)
 featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
             type = c("p"), layout = c(3, 4))
 ```
+
 
 ## Binary variables
 ```{r}
@@ -82,11 +72,13 @@ boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement")
 boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
 ```
 
+
 # Model Building
 #### Linear model
 ```{r least square model using caret package}
 # build a least-square linear model
 ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
+x = model.matrix(price~., housing)[,-1]
 set.seed(1)
 model_ls = train(x, y,
                  method = "lm",
@@ -95,7 +87,6 @@ summary(model_ls)
 ```
 
 ```{r ridge model building using caret package}
-ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 set.seed(1)
 # fit a ridge model using caret package
 ridge.fit = train(x, y,
@@ -109,10 +100,14 @@ plot(ridge.fit, xTrans = function(x) log(x))
 
 # find the optimal lambda
 ridge.fit$bestTune
+
+# obtain the coefficients of ridge model
+coef(ridge.fit$finalModel, ridge.fit$bestTune$lambda)
 ```
 
 ```{r lasso model building using caret package}
 # fit a lasso model using caret
+set.seed(1)
 lasso.fit = train(x, y,
                   method = "glmnet",
                   tuneGrid = expand.grid(alpha = 1,
@@ -127,5 +122,12 @@ lasso.fit$bestTune
 
 # check the coefficients for each predictors
 coef(lasso.fit$finalModel, lasso.fit$bestTune$lambda)
+```
+
+```{r compare these linear models}
+set.seed(1)
+resamp = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls))
+summary(resamp)
+bwplot(resamp, metric = "RMSE")
 ```
 
