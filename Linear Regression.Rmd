@@ -4,6 +4,11 @@ author: "Jieqi Tu (jt3098)"
 date: "3/26/2019"
 output: pdf_document
 ---
+```{r}
+library(tidyverse)
+library(caret)
+library("leaps")
+```
 
 
 #Load and tidy data
@@ -23,11 +28,13 @@ str(rawdata)
 #clean the rawdata; create a tidied dataset for analysis and modelling.
 #subset data: only those with view >0.
 housing = 
-  rawdata %>% select(-id, -date, -zipcode, -lat, -long) %>% 
+  rawdata %>% 
+  select(-id, -date, -zipcode, -lat, -long) %>% 
+  mutate(price = (price^0.02-1)/0.02) %>% 
   filter(view > 0 & bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated, -view) 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
 ```
 
 #Exploratory data analysis
@@ -35,7 +42,7 @@ housing =
 ```{r}
 # vector of response
 y <- housing$price
-
+x <- model.matrix(price~.,housing)[,-1]
 # matrix of continuous predictors 
 housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
 x_continuous <- model.matrix(price~., housing_continous)[,-1]
@@ -78,12 +85,10 @@ boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated")
 ```{r least square model using caret package}
 # build a least-square linear model
 ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
-x = model.matrix(price~., housing)[,-1]
 set.seed(1)
-library(MASS)
+
 lm_fit = lm(price~., data = housing)
-boxcox = boxcox(lm_fit)
-best.lambda = boxcox$x[which(boxcox$y==max(boxcox$y))]; best.lambda
+summary(lm_fit)
 step(lm_fit, direction = 'backward')
 model_ls = train(x, y,
                  method = "lm",
@@ -99,8 +104,8 @@ set.seed(1)
 ridge.fit = train(x, y,
                   method = "glmnet",
                   tuneGrid = expand.grid(alpha = 0,
-                                         lambda = exp(seq(-2, 15, length = 10))),
-                  preProcess = c("center", "scale", "BoxCox"),
+                                         lambda = exp(seq(-5, 5, length = 100))),
+                  preProcess = c("center", "scale"),
                   trControl = ctrl1)
 
 # plot the RMSE by log(lambda)
@@ -119,8 +124,8 @@ set.seed(1)
 lasso.fit = train(x, y,
                   method = "glmnet",
                   tuneGrid = expand.grid(alpha = 1,
-                                         lambda = exp(seq(-1, 12, length = 100))),
-                  preProcess = c("center", "scale", "BoxCox"),
+                                         lambda = exp(seq(-10, -5, length = 100))),
+                  preProcess = c("center", "scale"),
                   trControl = ctrl1)
 
 # plot the RMSE by log(lambda)

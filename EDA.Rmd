@@ -31,8 +31,8 @@ str(rawdata)
 #clean the rawdata; create a tidied dataset for analysis and modelling.
 #subset data: only those with view >0.
 housing = 
-  rawdata %>% select(-id, -date, -zipcode, -lat, -long) %>% 
-  mutate(price = (price^0.02 -1)/0.02) %>% 
+  rawdata %>% 
+  select(-id, -date, -zipcode, -lat, -long) %>% 
   filter(view > 0 & bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
