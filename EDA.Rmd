@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(mgcv)
 library(caret) #featurePlot
+library(plotmo)
 ```
 
 #Load and tidy data
@@ -35,7 +36,7 @@ housing =
   filter(view > 0 & bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated, -view) 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
 ```
 
 #Exploratory data analysis
@@ -46,7 +47,7 @@ y <- housing$price
 x <- model.matrix(price~.,housing)[,-1]
 
 # matrix of continuous predictors 
-housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
+housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
 x_continuous <- model.matrix(price~., housing_continous)[,-1]
 
 # set up the theme of plotting
@@ -59,7 +60,32 @@ theme1$strip.background$col <- rgb(.0, .2, .6, .2)
 trellis.par.set(theme1)
 
 featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
-            type = c("p"), layout = c(3, 4))
+            type = c("p"), layout = c(3, 3))
+```
+
+
+```{r histogram of response}
+#histogram of response `price` 
+housing %>% 
+  ggplot(aes(x = 0.000001*price)) + 
+    geom_histogram(aes(y =..density..),  
+                    bins = 50, colour = "black", fill = "white") +
+    geom_density(alpha = .1, fill = "#FF6666") +
+    geom_vline(aes(xintercept = 0.000001*mean(price)),   
+               color = "red", linetype = "dashed", size = 1)+
+   xlab("Price ($1,000,000)") +theme_classic()
+
+#QQplot
+housing %>% 
+  ggplot(aes(sample= price )) + 
+  stat_qq() + stat_qq_line(color = "red", size = 2)+ 
+  theme_minimal()+
+  labs(x = "Theoretical",y = "Sample", title="QQ plot")
+
+
+# the top 10 highest housing sales
+housing %>%  arrange(desc(price)) %>% top_n(10, price) 
+
 ```
 
 
@@ -72,11 +98,13 @@ housing_binary = housing %>%
          basement = as.factor(basement),
          renovated = as.factor(renovated)) 
 
-# boxplots
-par(mfrow = c(2, 2))
-boxplot(price~waterfront, data=housing_binary, ylab = "Price", xlab ="waterfront") 
-boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement") 
-boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
+housing_binary %>% 
+  mutate(waterfront = ifelse(waterfront == 0, 
+                             "No", "Yes")) %>% 
+  ggplot(aes(x = 0.000001*price,  fill= waterfront)) +
+  geom_density(  alpha=0.2)+
+  labs(x = "Price ($1,000,000)",y = "Density")
+
 ```
 
 ```{r correlation plot}
@@ -85,48 +113,10 @@ corrplot::corrplot(cor(x))
 ```
 
 # Non-linear models
-## Polynomial Regression
-```{r}
-# select optimal polynomial degree through ANOVA
-poly1 <- lm(price~bedrooms, data = housing)
-poly2 <- lm(price~poly(bedrooms,2), data = housing) 
-poly3 <- lm(price~poly(bedrooms,3), data = housing) 
-poly4 <- lm(price~poly(bedrooms,4), data = housing) 
-poly5 <- lm(price~poly(bedrooms,5), data = housing) 
-anova(poly1, poly2, poly3, poly4, poly5)
-```
-
-
-```{r polynomial}
-# select optimal d through 10-fold CV
-ctrl1 <-  trainControl(method = "repeatedcv", number = 10, repeats = 5)
-
-set.seed(1)
-poly.cv1 <- caret::train(x= data.frame(housing$bedrooms),y,
-                method = "lm",
-                trControl = ctrl1)
-set.seed(1)
-poly.cv2 <- caret::train(x= data.frame(poly(housing$bedrooms,2)),y,
-                method = "lm",
-                trControl = ctrl1)
-set.seed(1)
-poly.cv3 <- caret::train(x= data.frame(poly(housing$bedrooms,3)),y,
-                method = "lm",
-                trControl = ctrl1)
-set.seed(1)
-poly.cv4 <- caret::train(x= data.frame(poly(housing$bedrooms,4)),y,
-                method = "lm",
-                trControl = ctrl1)
-
-resamp <- resamples(list( p1 = poly.cv1, p2 = poly.cv2, p3 = poly.cv3, p4 = poly.cv4))
-bwplot(resamp, metric = "RMSE")
-
-```
-
 ## GAM
 ```{r GAM using mgcv}
 gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+ 
-                 yr_built+ s(sqft_living15)+ floors+ 
+                 yr_built+ floors+ 
                  condition+ bedrooms+ bathrooms+ 
                  s(sqft_living) + s(sqft_lot) +
                   waterfront+ basement+ renovated, 
@@ -144,12 +134,18 @@ set.seed(1)
 gam.fit.caret <- train(x, y,
                  method = "gam",
                  tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
-                 #preProcess = c("center", "scale"),
+                 preProcess = c("center", "scale", "BoxCox"),
                  trControl = ctrl1)
 
 gam.fit.caret$bestTune
 
 gam.fit.caret$finalModel
+```
+
+
+```{r pdp}
+plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99",
+       caption = "Partial Dependence Plots of GAM")
 ```
 
 
@@ -164,13 +160,13 @@ library(earth)
 # grid search for optimal hyperparameters
 # 2 tuning parameters in MARS: the degree of interactions and the number of retained terms
 mars_grid <- expand.grid(degree = 1:2, 
-                         nprune = 2:15)
+                         nprune = 2:30)
 
 set.seed(1)
 mars.fit <- train(x, y,
                  method = "earth",
                  tuneGrid = mars_grid,
-                 #preProcess = c("center", "scale"),
+                 preProcess = c("center", "scale", "BoxCox"),
                  trControl = ctrl1)
 
 ggplot(mars.fit)
@@ -180,19 +176,16 @@ mars.fit$bestTune
 coef(mars.fit$finalModel) 
 ```
 
-The final MARS model retained 7 predictors and no interaction term. The predictors are: `sqft_living`, `grade`,`condition`, `yr_built`, `sqft_living15`, `waterfront`, and `sqft_lot15`. 
+The final MARS model retained 10 predictors and no interaction term. The predictors are: `sqft_above`, `grade`,`condition`, `yr_built`, `sqft_living15`, `waterfront`,`basement`,`bathrooms` and `sqft_lot15`. 
 
 
 Partial dependence plots (PDPs)
 ```{r Partial dependence plots}
-p1 <- partial(mars.fit, pred.var = c("sqft_living"), grid.resolution = 10) %>% autoplot()
-p2 <- partial(mars.fit, pred.var = c("grade"), grid.resolution = 10) %>% autoplot()
-p3 <- partial(mars.fit, pred.var = c("yr_built"), grid.resolution = 10) %>% autoplot()
-p4 <- partial(mars.fit, pred.var = c("sqft_living15"), grid.resolution = 10) %>% autoplot()
-p5 <- partial(mars.fit, pred.var = c("sqft_lot15"), grid.resolution = 10) %>% autoplot()
-p5 <- partial(mars.fit, pred.var = c("condition"), grid.resolution = 10) %>% autoplot()
-grid.arrange(p1, p2,p3, p4, p5,p6, ncol = 2)
+plotmo(mars.fit, pmethod = "partdep",pt.col = "#99c2ff",
+       caption = "Partial Dependence Plots of MARS")
 ```
+
+
 
 
 ```{r comparison between non-linear models}
