@@ -16,7 +16,6 @@ library(plotmo)
 #Load and tidy data
 ```{r}
 #read data
-
 rawdata <- read.csv("kc_house_data.csv", header = TRUE)
 
 #inspect the structure of data
@@ -33,6 +32,7 @@ str(rawdata)
 #subset data: only those with view >0.
 housing = 
   rawdata %>% select(-id, -date, -zipcode, -lat, -long) %>% 
+  mutate(price = (price^0.02 -1)/0.02) %>% 
   filter(view > 0 & bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
