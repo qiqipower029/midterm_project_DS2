@@ -37,6 +37,7 @@ housing =
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
   select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
+
 ```
 
 #Exploratory data analysis
@@ -83,9 +84,6 @@ housing %>%
   labs(x = "Theoretical",y = "Sample", title="QQ plot")
 
 
-# the top 10 highest housing sales
-housing %>%  arrange(desc(price)) %>% top_n(10, price) 
-
 ```
 
 
@@ -113,18 +111,6 @@ corrplot::corrplot(cor(x))
 ```
 
 # Non-linear models
-## GAM
-```{r GAM using mgcv}
-gam.fit <- gam(price ~ s(sqft_living)+ grade+ s(sqft_above)+ 
-                 yr_built+ floors+ 
-                 condition+ bedrooms+ bathrooms+ 
-                 s(sqft_living) + s(sqft_lot) +
-                  waterfront+ basement+ renovated, 
-                 data = housing)
-```
-  
-smooth function can only be applied to continuous variables here. 
-because 'A term has fewer unique covariate combinations than specified maximum degrees of freedom'
 
 ## GAM using `caret`
 ```{r GAM using caret}
@@ -134,7 +120,7 @@ set.seed(1)
 gam.fit.caret <- train(x, y,
                  method = "gam",
                  tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
-                 preProcess = c("center", "scale", "BoxCox"),
+                 preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
 gam.fit.caret$bestTune
@@ -144,7 +130,7 @@ gam.fit.caret$finalModel
 
 
 ```{r pdp}
-plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99",
+plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99", level = .95,
        caption = "Partial Dependence Plots of GAM")
 ```
 
@@ -166,7 +152,7 @@ set.seed(1)
 mars.fit <- train(x, y,
                  method = "earth",
                  tuneGrid = mars_grid,
-                 preProcess = c("center", "scale", "BoxCox"),
+                 preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
 ggplot(mars.fit)
@@ -186,12 +172,11 @@ plotmo(mars.fit, pmethod = "partdep",pt.col = "#99c2ff",
 ```
 
 
-
-
 ```{r comparison between non-linear models}
 bwplot(resamples(list(mars = mars.fit,
                       gam = gam.fit.caret)), 
        metric = "RMSE")
+
 ```
 
 
