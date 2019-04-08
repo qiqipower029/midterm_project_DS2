@@ -1,0 +1,14 @@
+term          coefficients 
+(Intercept)   15.60147966
+bedrooms      -0.01676496
+bathrooms      0.08023556
+floors         0.04287175
+waterfront     0.15206428
+condition      0.06310154
+grade          0.36608136
+sqft_above     0.12260930
+yr_built      -0.16198233
+sqft_living15  0.14088610
+sqft_lot15    -0.03538383
+basement       0.08660144
+renovated      0.02745167

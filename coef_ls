@@ -1,0 +1,14 @@
+"","term","coefficients"
+"1","(Intercept)",15.60147966
+"2","bedrooms",-0.01676496
+"3","bathrooms",0.08023556
+"4","floors",0.04287175
+"5","waterfront",0.15206428
+"6","condition",0.06310154
+"7","grade",0.36608136
+"8","sqft_above",0.1226093
+"9","yr_built",-0.16198233
+"10","sqft_living15",0.1408861
+"11","sqft_lot15",-0.03538383
+"12","basement",0.08660144
+"13","renovated",0.02745167

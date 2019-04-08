@@ -43,42 +43,8 @@ housing =
 # vector of response
 y <- housing$price
 x <- model.matrix(price~.,housing)[,-1]
-# matrix of continuous predictors 
-housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, sqft_living15, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
-x_continuous <- model.matrix(price~., housing_continous)[,-1]
 
-# set up the theme of plotting
-theme1 <- trellis.par.get()   
-theme1$plot.symbol$col <- rgb(.2, .4, .2, .5)
-theme1$plot.symbol$pch <- 16
-theme1$plot.line$col <- rgb(.8, .1, .1, 1)
-theme1$plot.line$lwd <- 2
-theme1$strip.background$col <- rgb(.0, .2, .6, .2)
-trellis.par.set(theme1)
-
-featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
-            type = c("p"), layout = c(3, 4))
 ```
-
-
-## Binary variables
-```{r}
-# dataframe of binary predictors 
-housing_binary = housing %>% 
-  select(c(price,view, waterfront, basement, renovated )) %>%
-  mutate(view = as.factor(view),
-         waterfront = as.factor(waterfront),
-         basement = as.factor(basement),
-         renovated = as.factor(renovated)) 
-
-# boxplots
-par(mfrow = c(2, 2))
-boxplot(price~view, data=housing_binary, ylab = "Price", xlab ="View") 
-boxplot(price~waterfront, data=housing_binary, ylab = "Price", xlab ="waterfront") 
-boxplot(price~basement, data=housing_binary, ylab = "Price", xlab ="basement") 
-boxplot(price~renovated, data=housing_binary, ylab = "Price", xlab ="renovated") 
-```
-
 
 # Model Building
 #### Linear model
@@ -89,13 +55,13 @@ set.seed(1)
 
 lm_fit = lm(price~., data = housing)
 summary(lm_fit)
-step(lm_fit, direction = 'backward')
+step(lm_fit, direction = 'backward')  
 model_ls = train(x, y,
                  method = "lm",
                  preProcess = c("center", "scale"),
                  trControl = ctrl1)
 summary(model_ls)
-
+coef_ls = model_ls$finalModel$coefficients %>% as.data.frame()
 ```
 
 ```{r ridge model building using caret package}
@@ -115,7 +81,8 @@ plot(ridge.fit, xTrans = function(x) log(x))
 ridge.fit$bestTune
 
 # obtain the coefficients of ridge model
-coef(ridge.fit$finalModel, ridge.fit$bestTune$lambda)
+coef_ridge = coef(ridge.fit$finalModel, ridge.fit$bestTune$lambda); coef_ridge
+summary(ridge.fit)
 ```
 
 ```{r lasso model building using caret package}
@@ -136,6 +103,7 @@ lasso.fit$bestTune
 
 # check the coefficients for each predictors
 coef(lasso.fit$finalModel, lasso.fit$bestTune$lambda)
+summary(lasso.fit)
 ```
 
 ```{r compare these linear models}
