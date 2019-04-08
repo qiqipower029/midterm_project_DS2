@@ -2,7 +2,7 @@
 title: "EDA"
 author: "Jiayi Shen"
 date: "3/25/2019"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -42,7 +42,8 @@ housing =
 
 #Exploratory data analysis
 ## Continuous variables
-```{r}
+
+```{r, error=TRUE}
 # vector of response
 y <- housing$price
 x <- model.matrix(price~.,housing)[,-1]
@@ -60,21 +61,21 @@ theme1$plot.line$lwd <- 2
 theme1$strip.background$col <- rgb(.0, .2, .6, .2)
 trellis.par.set(theme1)
 
-featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
-            type = c("p"), layout = c(3, 3))
+#featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
+#            type = c("p"), layout = c(3, 3))
 ```
 
 
-```{r histogram of response}
+```{r histogram of response, include=FALSE}
 #histogram of response `price` 
 housing %>% 
-  ggplot(aes(x = 0.000001*price)) + 
+  ggplot(aes(x = price)) + 
     geom_histogram(aes(y =..density..),  
                     bins = 50, colour = "black", fill = "white") +
     geom_density(alpha = .1, fill = "#FF6666") +
-    geom_vline(aes(xintercept = 0.000001*mean(price)),   
+    geom_vline(aes(xintercept = mean(price)),   
                color = "red", linetype = "dashed", size = 1)+
-   xlab("Price ($1,000,000)") +theme_classic()
+   xlab("Price (After BoxCox Trans.)") +theme_classic()
 
 #QQplot
 housing %>% 
@@ -86,24 +87,6 @@ housing %>%
 
 ```
 
-
-## Binary variables
-```{r}
-# dataframe of binary predictors 
-housing_binary = housing %>% 
-  select(c(price, waterfront, basement, renovated )) %>%
-  mutate(waterfront = as.factor(waterfront),
-         basement = as.factor(basement),
-         renovated = as.factor(renovated)) 
-
-housing_binary %>% 
-  mutate(waterfront = ifelse(waterfront == 0, 
-                             "No", "Yes")) %>% 
-  ggplot(aes(x = 0.000001*price,  fill= waterfront)) +
-  geom_density(  alpha=0.2)+
-  labs(x = "Price ($1,000,000)",y = "Density")
-
-```
 
 ```{r correlation plot}
 par(mfrow = c(1, 1))
@@ -123,13 +106,13 @@ gam.fit.caret <- train(x, y,
                  preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
-gam.fit.caret$bestTune
+gam.fit.caret$finalModelx
 
-gam.fit.caret$finalModel
+summary(gam.fit.caret$finalModel)
 ```
 
 
-```{r pdp}
+```{r pdp, include=FALSE}
 plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99", level = .95,
        caption = "Partial Dependence Plots of GAM")
 ```
@@ -155,24 +138,21 @@ mars.fit <- train(x, y,
                  preProcess = c("center", "scale"),
                  trControl = ctrl1)
 
-ggplot(mars.fit)
 
-mars.fit$bestTune
-
-coef(mars.fit$finalModel) 
+summary(mars.fit$finalModel) 
 ```
 
 The final MARS model retained 10 predictors and no interaction term. The predictors are: `sqft_above`, `grade`,`condition`, `yr_built`, `sqft_living15`, `waterfront`,`basement`,`bathrooms` and `sqft_lot15`. 
 
 
 Partial dependence plots (PDPs)
-```{r Partial dependence plots}
+```{r Partial dependence plots, include = FALSE}
 plotmo(mars.fit, pmethod = "partdep",pt.col = "#99c2ff",
        caption = "Partial Dependence Plots of MARS")
 ```
 
 
-```{r comparison between non-linear models}
+```{r comparison between non-linear models, include = FALSE}
 bwplot(resamples(list(mars = mars.fit,
                       gam = gam.fit.caret)), 
        metric = "RMSE")
@@ -180,7 +160,7 @@ bwplot(resamples(list(mars = mars.fit,
 ```
 
 
-```{r comparison between all models}
+```{r comparison between all models, include = FALSE}
 ##############################################################
 ## Loading Linear Regression.Rmd before runing this code chunk.
 ##############################################################
@@ -189,6 +169,7 @@ set.seed(1)
 resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
                         mars = mars.fit, gam = gam.fit.caret))
 summary(resamp.all)
-bwplot(resamp.all, metric = "RMSE")
+bwplot(resamp.all, metric = "RMSE",
+       ylab = "Models")
 ```
 
