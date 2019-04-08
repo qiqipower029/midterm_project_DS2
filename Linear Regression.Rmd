@@ -37,13 +37,11 @@ housing =
   select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
 ```
 
-#Exploratory data analysis
-## Continuous variables
+
 ```{r}
 # vector of response
 y <- housing$price
 x <- model.matrix(price~.,housing)[,-1]
-
 ```
 
 # Model Building
@@ -53,15 +51,16 @@ x <- model.matrix(price~.,housing)[,-1]
 ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 set.seed(1)
 
+# stepwise elimination to select variables
 lm_fit = lm(price~., data = housing)
-summary(lm_fit)
 step(lm_fit, direction = 'backward')  
 model_ls = train(x, y,
                  method = "lm",
                  preProcess = c("center", "scale"),
                  trControl = ctrl1)
-summary(model_ls)
-coef_ls = model_ls$finalModel$coefficients %>% as.data.frame()
+
+#obtain coefficients
+coef_ls = model_ls$finalModel$coefficients %>% as.data.frame(); coef_ls
 ```
 
 ```{r ridge model building using caret package}
@@ -103,7 +102,6 @@ lasso.fit$bestTune
 
 # check the coefficients for each predictors
 coef(lasso.fit$finalModel, lasso.fit$bestTune$lambda)
-summary(lasso.fit)
 ```
 
 ```{r compare these linear models}
