@@ -29,7 +29,7 @@ str(rawdata)
 
 ```{r}
 #clean the rawdata; create a tidied dataset for analysis and modelling.
-#subset data: only those with view >0.
+#subset data: only those with view >0 and basement >0.
 housing = 
   rawdata %>% 
   select(-id, -date, -zipcode, -lat, -long) %>% 
