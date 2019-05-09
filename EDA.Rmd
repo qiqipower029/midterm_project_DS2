@@ -2,7 +2,7 @@
 title: "EDA"
 author: "Jiayi Shen"
 date: "3/25/2019"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -33,11 +33,14 @@ str(rawdata)
 housing = 
   rawdata %>% 
   select(-id, -date, -zipcode, -lat, -long) %>% 
-  filter(view > 0 & bedrooms <30) %>% 
+  filter(view > 0, bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
+  filter(basement > 0) %>% 
   select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
 
+# create training data and testing data.
+trrows <- createDataPartition(p=0.8, housing$price, list = FALSE)
 ```
 
 #Exploratory data analysis
@@ -49,7 +52,7 @@ y <- housing$price
 x <- model.matrix(price~.,housing)[,-1]
 
 # matrix of continuous predictors 
-housing_continous = housing %>% select(c(price, sqft_living, grade, sqft_above, yr_built, floors, condition, bedrooms, bathrooms, sqft_living, sqft_lot ))
+housing_continous = housing %>% select(c(price, sqft_living15, grade, sqft_above, yr_built, floors, condition, bedrooms, bathrooms, sqft_lot15 ))
 x_continuous <- model.matrix(price~., housing_continous)[,-1]
 
 # set up the theme of plotting
@@ -61,12 +64,12 @@ theme1$plot.line$lwd <- 2
 theme1$strip.background$col <- rgb(.0, .2, .6, .2)
 trellis.par.set(theme1)
 
-#featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
-#            type = c("p"), layout = c(3, 3))
+featurePlot(x_continuous, y, plot = "scatter", labels = c("","Y"),
+           type = c("p"), layout = c(3, 3))
 ```
 
 
-```{r histogram of response, include=FALSE}
+```{r histogram of response}
 #histogram of response `price` 
 housing %>% 
   ggplot(aes(x = price)) + 
@@ -84,92 +87,11 @@ housing %>%
   theme_minimal()+
   labs(x = "Theoretical",y = "Sample", title="QQ plot")
 
-
 ```
 
 
 ```{r correlation plot}
 par(mfrow = c(1, 1))
 corrplot::corrplot(cor(x))
-```
-
-# Non-linear models
-
-## GAM using `caret`
-```{r GAM using caret}
-ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
-
-set.seed(1)
-gam.fit.caret <- train(x, y,
-                 method = "gam",
-                 tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
-                 preProcess = c("center", "scale"),
-                 trControl = ctrl1)
-
-gam.fit.caret$finalModelx
-
-summary(gam.fit.caret$finalModel)
-```
-
-
-```{r pdp, include=FALSE}
-plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99", level = .95,
-       caption = "Partial Dependence Plots of GAM")
-```
-
-
-## Multivariate Adaptive Regression Splines (MARS)
-We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
-The MARS model building procedure automatically selects which variables to use (some variables are important, others not), the positions of the kinks in the hinge functions, and how the hinge functions are combined.  
-  
-```{r MARS}
-library(pdp)
-library(earth)
-
-# grid search for optimal hyperparameters
-# 2 tuning parameters in MARS: the degree of interactions and the number of retained terms
-mars_grid <- expand.grid(degree = 1:2, 
-                         nprune = 2:30)
-
-set.seed(1)
-mars.fit <- train(x, y,
-                 method = "earth",
-                 tuneGrid = mars_grid,
-                 preProcess = c("center", "scale"),
-                 trControl = ctrl1)
-
-
-summary(mars.fit$finalModel) 
-```
-
-The final MARS model retained 10 predictors and no interaction term. The predictors are: `sqft_above`, `grade`,`condition`, `yr_built`, `sqft_living15`, `waterfront`,`basement`,`bathrooms` and `sqft_lot15`. 
-
-
-Partial dependence plots (PDPs)
-```{r Partial dependence plots, include = FALSE}
-plotmo(mars.fit, pmethod = "partdep",pt.col = "#99c2ff",
-       caption = "Partial Dependence Plots of MARS")
-```
-
-
-```{r comparison between non-linear models, include = FALSE}
-bwplot(resamples(list(mars = mars.fit,
-                      gam = gam.fit.caret)), 
-       metric = "RMSE")
-
-```
-
-
-```{r comparison between all models, include = FALSE}
-##############################################################
-## Loading Linear Regression.Rmd before runing this code chunk.
-##############################################################
-
-set.seed(1)
-resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
-                        mars = mars.fit, gam = gam.fit.caret))
-summary(resamp.all)
-bwplot(resamp.all, metric = "RMSE",
-       ylab = "Models")
 ```
 
