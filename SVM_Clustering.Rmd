@@ -1,0 +1,196 @@
+---
+title: "SVM and Clustering"
+author: "Jiayi Shen"
+date: "5/11/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret) 
+library(e1071)
+library(factoextra)
+library(gridExtra)
+library(corrplot)
+library(RColorBrewer) 
+library(gplots)
+```
+
+#Load and tidy data
+```{r}
+#read data
+rawdata <- read.csv("kc_house_data.csv", header = TRUE)
+
+#inspect the structure of data
+str(rawdata)
+```
+
+
+```{r}
+#clean the rawdata; create a tidied dataset for analysis and modelling.
+#subset data: only those with view >0 and basement >0.
+housing = 
+  rawdata %>% 
+  select(-id, -date, -zipcode, -lat, -long) %>% 
+  filter(view > 0, bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
+         renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
+  filter(basement > 0) %>% 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
+
+# dichotimize response variable
+median(housing$price) #805000
+housing <- housing %>% mutate(price.new = ifelse(price>805000, "High", "Low")) 
+housing$price.new <- factor(housing$price.new, c("High", "Low"))
+# create training data and testing data.
+rowTrain <- createDataPartition(y = housing$price, 
+                                p=0.8, list = FALSE)
+```
+
+# SVM
+Using `caret`  
+Linear Kernel
+```{r Linear Kernel}
+ctrl <- trainControl(method = "cv")
+
+set.seed(1)
+svml.fit <- train(price.new~., 
+                  data = housing[rowTrain,], 
+                  method = "svmLinear2",
+                  preProcess = c("center", "scale"),
+                  tuneGrid = data.frame(cost = exp(seq(0,8,len=25))),
+                  trControl = ctrl)
+
+ggplot(svml.fit, highlight = TRUE)
+svml.fit$bestTune$cost
+```
+
+Radial Kernel
+```{r Radial Kernel}
+svmr.grid <- expand.grid(C = exp(seq(0,7,len=10)),
+                         sigma = exp(seq(-8,-3,len=5)))
+set.seed(1)             
+svmr.fit <- train(price.new~., 
+                  data = housing, 
+                  subset = rowTrain,
+                  method = "svmRadial",
+                  preProcess = c("center", "scale"),
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl)
+
+ggplot(svmr.fit, highlight = TRUE)
+```
+
+
+```{r resamples}
+resamp <- resamples(list(svmr = svmr.fit, svml = svml.fit))
+bwplot(resamp)
+```
+
+### Test data performance for SVM
+```{r}
+pred.svml <- predict(svml.fit, newdata = housing[-rowTrain,])
+pred.svmr <- predict(svmr.fit, newdata = housing[-rowTrain,])
+
+confusionMatrix(data = pred.svml, 
+                reference = housing$price.new[-rowTrain])
+
+confusionMatrix(data = pred.svmr, 
+                reference = housing$price.new[-rowTrain])
+```
+
+# PCA
+```{r}
+housing1 <- housing[,2:12]
+housing1 <- scale(housing1)
+
+fviz_nbclust(housing1,
+             FUNcluster = kmeans,
+             method = "silhouette")
+#optimal number of clusters = 2
+```
+
+```{r}
+set.seed(1)
+km <- kmeans(housing1, centers = 2, nstart = 20)
+km_vis <- fviz_cluster(list(data = housing1, cluster = km$cluster), 
+                       ellipse.type = "convex", 
+                       geom = c("point","text"),
+                       labelsize = 5, 
+                       palette = "Dark2") + labs(title = "K-means") 
+
+km_vis
+```
+
+# Hierarchical clustering
+```{r}
+hc.complete <- hclust(dist(housing1), method = "complete")
+hc.average <- hclust(dist(housing1), method = "average")
+hc.single <- hclust(dist(housing1), method = "single")
+hc.centroid <- hclust(dist(housing1), method = "centroid")
+
+fviz_dend(hc.complete, k = 4,        
+          cex = 0.3, 
+          palette = "jco", 
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+```
+
+
+```{r, fig.width = 12, fig.height=7}
+#display.brewer.all(n=NULL, type="all", select=NULL, exact.n=TRUE)
+col1 <- colorRampPalette(brewer.pal(9, "GnBu"))(100)
+col2 <- colorRampPalette(brewer.pal(3, "Spectral"))(2)
+
+# now try to reduce the number of clusters
+heatmap.2(t(housing1), 
+          col = col1, keysize=.8, key.par = list(cex=.5),
+          trace = "none", key = TRUE, cexCol = 0.75, 
+          ColSideColors = col2[as.numeric(housing[,"price.new"])+1],
+          margins = c(10, 10))
+```
+
+# PCA
+```{r, fig.height=3}
+pca <- prcomp(housing1)
+pca$rotation
+pca$sdev
+pca$rotation %*% diag(pca$sdev)
+corrplot(pca$rotation %*% diag(pca$sdev))
+
+var <- get_pca_var(pca)
+corrplot(var$cor)
+```
+
+The function `fviz_eig()` plots the eigenvalues/variances against the number of dimensions. 
+
+```{r, fig.height=4}
+fviz_eig(pca, addlabels = TRUE)
+```
+
+The function `fviz_contrib()` can be used to visualize the contribution of variables from the results of PCA.
+
+```{r}
+a <- fviz_contrib(pca, choice = "var", axes = 1)
+b <- fviz_contrib(pca, choice = "var", axes = 2)
+grid.arrange(a, b, nrow = 2)
+```
+
+The function `fviz_pca_biplot()` can be used to obtain the biplot of individuals and variables.
+
+```{r, fig.height=4}
+fviz_pca_biplot(pca, axes = c(1,2),
+                habillage = housing$price.new,
+                label = c("var"),
+                addEllipses = TRUE) 
+
+fviz_pca_var(pca, col.var = "steelblue", repel = TRUE)
+fviz_pca_ind(pca,
+             habillage = housing$price.new,
+             label = "none",
+             addEllipses = TRUE)
+```
+
+

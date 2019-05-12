@@ -28,6 +28,15 @@ str(rawdata)
 
 
 ```{r}
+#read data
+rawdata <- read.csv("kc_house_data.csv", header = TRUE)
+
+#inspect the structure of data
+str(rawdata)
+```
+
+
+```{r}
 #clean the rawdata; create a tidied dataset for analysis and modelling.
 #subset data: only those with view >0 and basement >0.
 housing = 
@@ -37,10 +46,15 @@ housing =
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
   filter(basement > 0) %>% 
-  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
 
+# dichotimize response variable
+median(housing$price) #805000
+housing <- housing %>% mutate(price.new = ifelse(price>805000, "High", "Low")) 
+housing$price.new <- factor(housing$price.new, c("High", "Low"))
 # create training data and testing data.
-trrows <- createDataPartition(p=0.8, housing$price, list = FALSE)
+rowTrain <- createDataPartition(y = housing$price, 
+                                p=0.8, list = FALSE)
 ```
 
 #Exploratory data analysis
