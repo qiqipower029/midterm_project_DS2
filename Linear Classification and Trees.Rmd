@@ -72,10 +72,19 @@ model.glm = train(x = housing[rowTrain, 2:12],
                   trControl = ctrl)
 # test performance
 pred.glm = predict(model.glm, newdata = housing[-rowTrain,2:13], response = "prob")
-pred.glm.prob = predict(model.glm, newdata = housing[-rowTrain,2:13], type = "response")
+pred.glm.prob = predict(model.glm, newdata = housing[-rowTrain,2:13], type = "prob")
 confusionMatrix(data = as.factor(pred.glm), reference = housing$price.new[-rowTrain])
 
 # plot the ROC curve
-roc.glm = roc(housing$price.new[-rowTrain], levels = c("High", "low"), pred.glm.prob)
+roc.glm = roc(housing$price.new[-rowTrain], pred.glm.prob$High)
+plot(roc.glm, legacy.axes = T, print.auc = T)
+plot(smooth(roc.glm), col = 4, add = T)
+```
+
+# Discriminant Analysis
+```{r LDA using caret}
+library(MASS)
+set.seed(1)
+model.lda = 
 ```
 
