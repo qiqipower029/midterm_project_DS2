@@ -1,0 +1,81 @@
+---
+title: "Linear classification and trees"
+author: "Jieqi Tu (jt3098)"
+date: "5/13/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(AppliedPredictiveModeling)
+library(pROC)
+```
+
+
+#Load and tidy data
+```{r}
+#read data
+rawdata <- read.csv("kc_house_data.csv", header = TRUE)
+
+#inspect the structure of data
+str(rawdata)
+```
+
+
+```{r}
+#clean the rawdata; create a tidied dataset for analysis and modelling.
+#subset data: only those with view >0 and basement >0.
+housing = 
+  rawdata %>% 
+  select(-id, -date, -zipcode, -lat, -long) %>% 
+  filter(view > 0, bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
+         renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
+  filter(basement > 0) %>% 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
+
+# dichotimize response variable
+median(housing$price) #805000
+housing <- housing %>% mutate(price.new = ifelse(price>805000, "High", "Low")) 
+housing$price.new <- factor(housing$price.new, c("High", "Low"))
+# create training data and testing data.
+rowTrain <- createDataPartition(y = housing$price, 
+                                p=0.8, list = FALSE)
+```
+
+# Data visuailization
+```{r data visualization for linear classification}
+transparentTheme(trans = 0.4)
+featurePlot(x = housing[,2:12],
+            y = housing$price.new,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+```
+
+From the feature plot we could see that, the two classes of price are distributed differently in features. 
+
+# Logistic Regression
+```{r logistic regression}
+# Use caret package
+ctrl = trainControl(method = "cv",
+                    summaryFunction = twoClassSummary,
+                    classProbs = T)
+set.seed(1)
+model.glm = train(x = housing[rowTrain, 2:12],
+                  y = housing$price.new[rowTrain],
+                  method = "glm",
+                  metric = "ROC",
+                  trControl = ctrl)
+# test performance
+pred.glm = predict(model.glm, newdata = housing[-rowTrain,2:13], response = "prob")
+pred.glm.prob = predict(model.glm, newdata = housing[-rowTrain,2:13], type = "response")
+confusionMatrix(data = as.factor(pred.glm), reference = housing$price.new[-rowTrain])
+
+# plot the ROC curve
+roc.glm = roc(housing$price.new[-rowTrain], levels = c("High", "low"), pred.glm.prob)
+```
+
