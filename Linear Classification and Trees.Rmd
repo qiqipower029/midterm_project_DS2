@@ -81,6 +81,8 @@ plot(roc.glm, legacy.axes = T, print.auc = T)
 plot(smooth(roc.glm), col = 4, add = T)
 ```
 
+The AUC is 0.901. The accuracy is 0.8223. Sensitivity is 0.8182, Specificity is 0.8264.
+
 # Discriminant Analysis
 ```{r LDA using caret}
 library(MASS)
