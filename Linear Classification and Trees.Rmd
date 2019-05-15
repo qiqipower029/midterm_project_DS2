@@ -81,12 +81,70 @@ plot(roc.glm, legacy.axes = T, print.auc = T)
 plot(smooth(roc.glm), col = 4, add = T)
 ```
 
-The AUC is 0.901. The accuracy is 0.8223. Sensitivity is 0.8182, Specificity is 0.8264.
+The AUC is 0.943. The accuracy is 0.8676. Sensitivity is 0.8042, Specificity is 0.9306.
 
 # Discriminant Analysis
 ```{r LDA using caret}
 library(MASS)
 set.seed(1)
-model.lda = 
+model.lda = train(x = housing[rowTrain, 2:12],
+                  y = housing$price.new[rowTrain],
+                  method = "lda",
+                  metric = "ROC",
+                  trControl = ctrl)
+pred.lda = predict(model.lda, newdata = housing[-rowTrain,2:13], type = "prob")
+roc.lda = roc(housing$price.new[-rowTrain], pred.lda$High, levels = c("High", "Low"))
+plot(roc.lda, legacy.axes = T, print.auc = T)
 ```
 
+The AUC for LDA is 0.933.
+
+```{r QDA using caret package}
+set.seed(1)
+model.qda = train(x = housing[rowTrain, 2:12],
+                  y = housing$price.new[rowTrain],
+                  method = "qda",
+                  metric = "ROC",
+                  trControl = ctrl)
+
+pred.qda = predict(model.qda, newdata = housing[-rowTrain, 2:13], type = "prob")
+roc.qda = roc(housing$price.new[-rowTrain], pred.qda$High, levels = c("High", "Low"))
+plot(roc.qda, legacy.axes = T, print.auc = T)
+```
+
+The AUC for QDA is 0.889.
+
+```{r KNN using caret}
+set.seed(1)
+model.knn = train(x = housing[rowTrain, 2:12],
+                  y = housing$price.new[rowTrain],
+                  method = "knn",
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  tuneGrid = data.frame(k = seq(1, 200, by = 5)),
+                  trControl = ctrl)
+ggplot(model.knn) + theme_bw()
+```
+
+```{r Naive Bayes using caret}
+set.seed(1)
+nbGrid = expand.grid(usekernel = c(F, T),
+                     fL = 1,
+                     adjust = seq(0, 5, by = 1))
+model.nb = train(x = housing[rowTrain, 2:12],
+                 y = housing$price.new[rowTrain],
+                 method = "nb",
+                 metric = "ROC",
+                 tuneGrid = nbGrid,
+                 trControl = ctrl)
+plot(model.nb)
+```
+
+### Model Comparism
+```{r compare models}
+res = resamples(list(GLM = model.glm, LDA = model.lda, QDA = model.qda, NB = model.nb, KNN = model.knn))
+
+summary(res)
+```
+
+GLM and LDA tend to have higher AUC values.
