@@ -156,6 +156,8 @@ model.nb = train(x = housing[rowTrain, 2:12],
                  metric = "ROC",
                  tuneGrid = nbGrid,
                  trControl = ctrl)
+
+pred.nb = predict(model.nb, newdata = housing[-rowTrain, 2:13], type = "prob")
 plot(model.nb)
 ```
 
@@ -184,5 +186,137 @@ plot(roc.nb, col = 5, add = T)
 plot(roc.knn, col = 6, add = T)
 modelNames = c("glm", "glmn", "lda", "qda", "nb", "knn")
 legend("bottomright", legend = paste0(modelNames, ": ", round(auc, 3)), col = 1:6, lwd = 2)
+```
+
+### Regression Trees
+```{r the CART approach}
+set.seed(1)
+library(rpart.plot)
+housing = 
+  rawdata %>% 
+  dplyr::select(-id, -date, -zipcode, -lat, -long) %>% 
+  filter(view > 0, bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
+         renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
+  filter(basement > 0) %>% 
+  dplyr::select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
+housing = na.omit(housing)
+
+ctrl1 = trainControl(method = "cv", number = 10)
+rpart.fit = train(price~., housing,
+                  method = "rpart",
+                  tuneGrid = data.frame(cp = exp(seq(-20, -5, length = 20))),
+                  trControl = ctrl1)
+
+ggplot(rpart.fit, highlight = T) + theme_bw()
+
+rpart.fit$finalModel$cptable
+rpart.plot(rpart.fit$finalModel)
+
+# 1se rule
+rpart.fit.1se = train(price~., housing,
+                  method = "rpart",
+                  tuneGrid = data.frame(cp = exp(seq(-20, -5, length = 20))),
+                  trControl = trainControl(method = "cv", number = 10, selectionFunction = "oneSE"))
+
+rpart.fit.1se$finalModel$cptable
+rpart.plot(rpart.fit.1se$finalModel)
+```
+
+The 1se rule provided a much more simple model.
+
+```{r tune over maximum depth}
+# tune over maximum depth, method = "rpart2"
+set.seed(1)
+rpart2.fit = train(price~., housing,
+                   method = "rpart2",
+                   tuneGrid = data.frame(maxdepth = 1:12),
+                   trControl = ctrl1)
+ggplot(rpart2.fit, highlight = T) + theme_bw()
+rpart.plot(rpart2.fit$finalModel)
+```
+
+```{r conditional inference tree}
+# fit a conditional inference tree
+set.seed(1)
+ctree.fit = train(price~., housing,
+                  method = "ctree",
+                  tuneGrid = data.frame(mincriterion = 1 - exp(seq(-6, -2, length = 20))),
+                  trControl = ctrl1)
+ggplot(ctree.fit, highlight = T) + theme_bw()
+plot(ctree.fit$finalModel)
+```
+
+### Ensemble Methods
+
+Bagging and Random forests
+
+```{r bagging}
+# bagging
+bagging.grid = expand.grid(mtry = 11,
+                           splitrule = "variance", 
+                           min.node.size = 1:30)
+set.seed(1)
+bagging.fit = train(price~., housing,
+                    method = "ranger",
+                    tuneGrid = bagging.grid,
+                    trControl = ctrl1,
+                    importance = "impurity")
+
+ggplot(bagging.fit, highlight = T) + theme_bw()
+
+# check variable importance
+barplot(sort(ranger::importance(bagging.fit$finalModel), decreasing = FALSE),
+        las = 2, horiz = T, cex.names = 0.7,
+        col = colorRampPalette(colors = c("darkred", "white", "darkblue"))(19))
+```
+
+The most important variables are grade, the area above and the area of living room.
+
+```{r ranger}
+# ranger
+rf.grid = expand.grid(mtry = 1:5, splitrule = "variance",
+                      min.node.size = 1:10)
+set.seed(1)
+rf.fit = train(price~., housing,
+               method = "ranger",
+               tuneGrid = rf.grid,
+               trControl = ctrl1,
+               importance = "impurity")
+
+ggplot(rf.fit, highlight = T) + theme_bw()
+
+# check variable importance
+barplot(sort(ranger::importance(rf.fit$finalModel), decreasing = FALSE),
+        las = 2, horiz = T, cex.names = 0.7,
+        col = colorRampPalette(colors = c("darkred", "white", "darkblue"))(19))
+```
+
+When p = 4, minimal node size = 6, we get the lowest RMSE value. The importance is the same as bagging.
+
+```{r boosting}
+# boosting
+set.seed(1)
+gbm.grid = expand.grid(n.trees = c(2000, 3000, 5000),
+                       interaction.depth = 1:10,
+                       shrinkage = c(0.001, 0.003, 0.005),
+                       n.minobsinnode = 1)
+gbm.fit = train(price~., housing,
+                method = "gbm",
+                tuneGrid = gbm.grid,
+                trControl = ctrl1,
+                verbose = FALSE)
+
+ggplot(gbm.fit, highlight = T) + theme_bw()
+
+# check variable importance
+summary(gbm.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+```
+
+### Model comparism
+```{r compare regression classification models}
+# compare cross-validation performance of models
+resamp = resamples(list(rf = rf.fit, bagging = bagging.fit, gbm = gbm.fit))
+summary(resamp)
 ```
 
