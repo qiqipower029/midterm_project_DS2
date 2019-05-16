@@ -15,6 +15,17 @@ library(gridExtra)
 library(corrplot)
 library(RColorBrewer) 
 library(gplots)
+library(rpart)
+library(rpart.plot)
+library(party)
+library(partykit)
+library(randomForest)
+library(ranger)
+library(gbm)
+library(plotmo)
+library(pdp)
+library(pROC)
+library(lime)
 ```
 
 #Load and tidy data
@@ -40,11 +51,13 @@ housing =
   select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
 
 # dichotimize response variable
-median(housing$price) #805000
-housing <- housing %>% mutate(price.new = ifelse(price>805000, "High", "Low")) 
+ median(housing$price) #= 805000
+housing <- housing %>% 
+  mutate(price.new = ifelse(price>805000, "High", "Low")) %>% 
+  select(-price) 
 housing$price.new <- factor(housing$price.new, c("High", "Low"))
 # create training data and testing data.
-rowTrain <- createDataPartition(y = housing$price, 
+rowTrain <- createDataPartition(y = housing$price.new, 
                                 p=0.8, list = FALSE)
 ```
 
@@ -59,16 +72,16 @@ svml.fit <- train(price.new~.,
                   data = housing[rowTrain,], 
                   method = "svmLinear2",
                   preProcess = c("center", "scale"),
-                  tuneGrid = data.frame(cost = exp(seq(0,8,len=25))),
+                  tuneGrid = data.frame(cost = exp(seq(-4,0,len=25))),
                   trControl = ctrl)
 
 ggplot(svml.fit, highlight = TRUE)
-svml.fit$bestTune$cost
+svml.fit$bestTune$cost #0.311
 ```
 
 Radial Kernel
 ```{r Radial Kernel}
-svmr.grid <- expand.grid(C = exp(seq(0,7,len=10)),
+svmr.grid <- expand.grid(C = exp(seq(1,5,len=10)),
                          sigma = exp(seq(-8,-3,len=5)))
 set.seed(1)             
 svmr.fit <- train(price.new~., 
@@ -80,6 +93,7 @@ svmr.fit <- train(price.new~.,
                   trControl = ctrl)
 
 ggplot(svmr.fit, highlight = TRUE)
+svmr.fit$bestTune #sigma=0.004;  C=95
 ```
 
 
@@ -94,15 +108,16 @@ pred.svml <- predict(svml.fit, newdata = housing[-rowTrain,])
 pred.svmr <- predict(svmr.fit, newdata = housing[-rowTrain,])
 
 confusionMatrix(data = pred.svml, 
-                reference = housing$price.new[-rowTrain])
+                reference = housing$price.new[-rowTrain]) #0.8229
 
 confusionMatrix(data = pred.svmr, 
-                reference = housing$price.new[-rowTrain])
+                reference = housing$price.new[-rowTrain]) #0.8368 
 ```
 
-# PCA
+# Clustering
+## K-means
 ```{r}
-housing1 <- housing[,2:12]
+housing1 <- housing[,1:11]
 housing1 <- scale(housing1)
 
 fviz_nbclust(housing1,
@@ -123,19 +138,21 @@ km_vis <- fviz_cluster(list(data = housing1, cluster = km$cluster),
 km_vis
 ```
 
-# Hierarchical clustering
-```{r}
+## Hierarchical clustering
+```{r, include = FALSE}
 hc.complete <- hclust(dist(housing1), method = "complete")
 hc.average <- hclust(dist(housing1), method = "average")
 hc.single <- hclust(dist(housing1), method = "single")
 hc.centroid <- hclust(dist(housing1), method = "centroid")
 
-fviz_dend(hc.complete, k = 4,        
+complete_vis <- fviz_dend(hc.complete, k = 2,        
           cex = 0.3, 
           palette = "jco", 
           color_labels_by_k = TRUE,
           rect = TRUE, rect_fill = TRUE, rect_border = "jco",
           labels_track_height = 2.5)
+complete_vis
+
 ```
 
 
@@ -164,23 +181,24 @@ var <- get_pca_var(pca)
 corrplot(var$cor)
 ```
 
-The function `fviz_eig()` plots the eigenvalues/variances against the number of dimensions. 
 
 ```{r, fig.height=4}
+#plots the eigenvalues/variances against the number of dimensions. 
 fviz_eig(pca, addlabels = TRUE)
 ```
 
-The function `fviz_contrib()` can be used to visualize the contribution of variables from the results of PCA.
 
 ```{r}
 a <- fviz_contrib(pca, choice = "var", axes = 1)
 b <- fviz_contrib(pca, choice = "var", axes = 2)
+#visualize the contribution of variables from the results of PCA.
 grid.arrange(a, b, nrow = 2)
 ```
 
-The function `fviz_pca_biplot()` can be used to obtain the biplot of individuals and variables.
+`sqrt_above`, `grade`, `bathrooms`, `sqrt_living15`, and `floors` contribute more to the first principal component, compared to other variables. `renovated`, `yr_built`, and `waterfront` contribute more to the second pricipal ccomponent.   
 
 ```{r, fig.height=4}
+# to obtain the biplot of individuals and variables.
 fviz_pca_biplot(pca, axes = c(1,2),
                 habillage = housing$price.new,
                 label = c("var"),
@@ -193,4 +211,246 @@ fviz_pca_ind(pca,
              addEllipses = TRUE)
 ```
 
+With only two principal components, we can distinguish the two classes reasonably well.  
+
+\newpage  
+# Classification tree
+## CART
+```{r}
+ctrl <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+set.seed(1)
+rpart.fit <- train(price.new~., housing, 
+                   subset = rowTrain,
+                   method = "rpart",
+                   tuneGrid = data.frame(cp = exp(seq(-6,-4, len = 20))),
+                   trControl = ctrl,
+                   metric = "ROC")
+ggplot(rpart.fit, highlight = TRUE)
+rpart.plot(rpart.fit$finalModel)
+
+# Test set performance
+rpart.pred.prob <- predict(rpart.fit, newdata = housing[-rowTrain,], type = "prob")[,1]
+rpart.pred <- rep("Low", length(rpart.pred.prob))
+rpart.pred[rpart.pred.prob>0.5] <- "High"
+confusionMatrix(data = as.factor(rpart.pred),
+                reference = housing$price.new[-rowTrain],
+                positive = "High")
+# 0.8194  
+```
+
+## CIT
+```{r}
+set.seed(1)
+ctree.fit <- train(price.new~., housing, 
+                   subset = rowTrain,
+                   method = "ctree",
+                   tuneGrid = data.frame(mincriterion = 1-exp(seq(-5, -2, length = 20))),
+                   metric = "ROC",
+                   trControl = ctrl)
+ggplot(ctree.fit, highlight = TRUE)
+plot(ctree.fit$finalModel)
+
+# Test set performance
+ctree.pred.prob <- predict(ctree.fit, newdata = housing[-rowTrain,], type = "prob")[,1]
+ctree.pred <- rep("Low", length(ctree.pred.prob))
+ctree.pred[ctree.pred.prob>0.5] <- "High"
+confusionMatrix(data = as.factor(ctree.pred),
+                reference = housing$price.new[-rowTrain],
+                positive = "High")
+# 0.7951
+
+
+```
+
+## Random Forest
+```{r}
+rf.grid <- expand.grid(mtry = 1:6,
+                       splitrule = "gini",
+                       min.node.size = 1:6)
+set.seed(1)
+rf.fit <- train(price.new~., housing, 
+                subset = rowTrain,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+
+
+# Test set performance
+rf.pred.prob <- predict(rf.fit, newdata = housing[-rowTrain,], type = "prob")[,1]
+rf.pred <- rep("Low", length(rf.pred.prob))
+rf.pred[rf.pred.prob>0.5] <- "High"
+confusionMatrix(data = as.factor(rf.pred),
+                reference = housing$price.new[-rowTrain],
+                positive = "High")
+# 0.8056 
+
+# Explain your prediction 
+new_obs <- housing[-rowTrain,-12][1:2,]
+explainer.rf <- lime(housing[rowTrain,-12], rf.fit)
+explanation.rf <- explain(new_obs, explainer.rf, n_features = 8,
+                          labels = "High")
+plot_features(explanation.rf)
+```
+
+The optimal mtry is 2 and the minimal node size picked up by the optimal model is 3.  
+
+### Variable importance of random forest model
+```{r}
+
+set.seed(1)
+rf2.final.imp <- ranger(price.new~., housing,
+                        mtry = 2, splitrule = "gini",
+                        min.node.size = 3,
+                        importance = "impurity") 
+
+barplot(sort(ranger::importance(rf2.final.imp), decreasing = FALSE), 
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("darkred","white","darkblue"))(19))
+
+```
+
+Using node impurity as the measure of varaible importance, the top three important variable are `grade`, `sqft_above`, and `sqft_living15`.    
+
+
+## Boosting
+
+### Binomial loss
+
+```{r}
+gbmB.grid <- expand.grid(n.trees = c(2000,3000,4000),
+                        interaction.depth = 1:2,
+                        shrinkage = c(0.001,0.003,0.005),
+                        n.minobsinnode = 1)
+set.seed(1)
+# Binomial loss function
+gbmB.fit <- train(price.new~., housing, 
+                 subset = rowTrain, 
+                 tuneGrid = gbmB.grid,
+                 trControl = ctrl,
+                 method = "gbm",
+                 distribution = "bernoulli",
+                 metric = "ROC",
+                 verbose = FALSE)
+
+ggplot(gbmB.fit, highlight = TRUE)
+
+# Test set performance
+gbmB.pred.prob <- predict(gbmB.fit, newdata = housing[-rowTrain,], type = "prob")[,1]
+gbmB.pred <- rep("Low", length(gbmB.pred.prob))
+gbmB.pred[gbmB.pred.prob>0.5] <- "High"
+confusionMatrix(data = as.factor(gbmB.pred),
+                reference = housing$price.new[-rowTrain],
+                positive = "High")
+# 0.8333 
+
+#Variable importance
+summary(gbmB.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+```
+
+The top three important variable are `grade`, `sqft_above`, and `sqft_living15`.  
+
+### AdaBoost
+
+```{r}
+gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000),
+                        interaction.depth = 1:2,
+                        shrinkage = c(0.001,0.003,0.005),
+                        n.minobsinnode = 1)
+set.seed(1)
+# Adaboost loss function
+gbmA.fit <- train(price.new~., housing, 
+                 subset = rowTrain, 
+                 tuneGrid = gbmA.grid,
+                 trControl = ctrl,
+                 method = "gbm",
+                 distribution = "adaboost",
+                 metric = "ROC",
+                 verbose = FALSE)
+
+ggplot(gbmA.fit, highlight = TRUE)
+
+# Test set performance
+gbmA.pred.prob <- predict(gbmA.fit, newdata = housing[-rowTrain,], type = "prob")[,1]
+gbmA.pred <- rep("Low", length(gbmA.pred.prob))
+gbmA.pred[gbmA.pred.prob>0.5] <- "High"
+confusionMatrix(data = as.factor(gbmA.pred),
+                reference = housing$price.new[-rowTrain],
+                positive = "High") 
+# 0.8333
+
+# Explain your prediction 
+new_obs <- housing[-rowTrain,-12][1:2,]
+explainer.gbm <- lime(housing[rowTrain,-12], gbmA.fit)
+explanation.gbm <- explain(new_obs, explainer.gbm, n_features = 8,
+                           labels = "High")
+plot_features(explanation.gbm)
+
+#Variable importance
+summary(gbmA.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+```
+
+The top three important variable are also `grade`, `sqft_above`, and `sqft_living15`.    
+
+
+### Resamples
+```{r}
+resamp.tree <- resamples(list(rf = rf.fit, 
+                         gbmA = gbmA.fit,
+                         gbmB = gbmB.fit,
+                         rpart = rpart.fit,
+                         ctree = ctree.fit))
+bwplot(resamp.tree, metric = "ROC")
+```
+
+
+
+### Variable importance - PDP
+```{r}
+pdp.rf <- rf.fit %>% 
+  partial(pred.var = "condition", 
+          grid.resolution = 100,
+          prob = TRUE) %>%
+  autoplot(rug = TRUE, train = housing[rowTrain,]) +
+  ggtitle("Random forest") 
+
+pdp.gbm <- gbmA.fit %>% 
+  partial(pred.var = "condition", 
+          grid.resolution = 100,
+          prob = TRUE) %>%
+  autoplot(rug = TRUE, train = housing[rowTrain,]) +
+  ggtitle("Boosting") 
+
+grid.arrange(pdp.rf, pdp.gbm, nrow = 1)
+
+```
+
+# Test data performance (Tree)
+
+```{r}
+roc.rpart <- roc(housing$price.new[-rowTrain], rpart.pred.prob)
+roc.ctree <- roc(housing$price.new[-rowTrain], ctree.pred.prob)
+roc.rf <- roc(housing$price.new[-rowTrain], rf.pred.prob)
+roc.gbmA <- roc(housing$price.new[-rowTrain], gbmA.pred.prob)
+roc.gbmB <- roc(housing$price.new[-rowTrain], gbmB.pred.prob)
+
+
+plot(roc.rpart)
+plot(roc.ctree, add = TRUE, col = 2)
+plot(roc.rf, add = TRUE, col = 3)
+plot(roc.gbmA, add = TRUE, col = 4)
+plot(roc.gbmB, add = TRUE, col = 5)
+
+
+auc <- c(roc.rpart$auc[1],  roc.ctree$auc[1],
+         roc.rf$auc[1], roc.gbmA$auc[1], roc.gbmB$auc[1])
+
+modelNames <- c("rpart_caret","ctree","rf","gbmA","gbmB")
+legend("bottomright", legend = paste0(modelNames, ": ", round(auc,3)),
+       col = 1:6, lwd = 2)
+```
 
