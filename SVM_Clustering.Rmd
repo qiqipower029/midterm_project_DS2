@@ -96,6 +96,19 @@ ggplot(svmr.fit, highlight = TRUE)
 svmr.fit$bestTune #sigma=0.004;  C=95
 ```
 
+# Logistic Regression
+```{r}
+ctrl = trainControl(method = "cv",
+                    summaryFunction = twoClassSummary,
+                    classProbs = T)
+set.seed(1)
+model.glm = train(x = housing[rowTrain, 1:11],
+                  y = housing$price.new[rowTrain],
+                  method = "glm",
+                  metric = "ROC",
+                  trControl = ctrl)
+```
+
 
 ```{r resamples}
 resamp <- resamples(list(svmr = svmr.fit, svml = svml.fit))
@@ -128,14 +141,14 @@ fviz_nbclust(housing1,
 
 ```{r}
 set.seed(1)
-km <- kmeans(housing1, centers = 2, nstart = 20)
+km <- kmeans(housing1, centers = 2, nstart = 100)
 km_vis <- fviz_cluster(list(data = housing1, cluster = km$cluster), 
                        ellipse.type = "convex", 
                        geom = c("point","text"),
                        labelsize = 5, 
                        palette = "Dark2") + labs(title = "K-means") 
 
-km_vis
+km_vis #two principal components
 ```
 
 ## Hierarchical clustering
@@ -165,8 +178,9 @@ col2 <- colorRampPalette(brewer.pal(3, "Spectral"))(2)
 heatmap.2(t(housing1), 
           col = col1, keysize=.8, key.par = list(cex=.5),
           trace = "none", key = TRUE, cexCol = 0.75, 
-          ColSideColors = col2[as.numeric(housing[,"price.new"])+1],
-          margins = c(10, 10))
+          labCol = as.character(housing[,12]),
+          ColSideColors = col2[as.numeric(housing[,"price.new"])],
+          margins = c(10, 10)) #high =1=orange, low =2= green
 ```
 
 # PCA
@@ -184,7 +198,7 @@ corrplot(var$cor)
 
 ```{r, fig.height=4}
 #plots the eigenvalues/variances against the number of dimensions. 
-fviz_eig(pca, addlabels = TRUE)
+fviz_eig(pca, ncp=20 ,addlabels = TRUE)
 ```
 
 
@@ -240,6 +254,7 @@ confusionMatrix(data = as.factor(rpart.pred),
 # 0.8194  
 ```
 
+
 ## CIT
 ```{r}
 set.seed(1)
@@ -260,8 +275,6 @@ confusionMatrix(data = as.factor(ctree.pred),
                 reference = housing$price.new[-rowTrain],
                 positive = "High")
 # 0.7951
-
-
 ```
 
 ## Random Forest
@@ -301,7 +314,6 @@ The optimal mtry is 2 and the minimal node size picked up by the optimal model i
 
 ### Variable importance of random forest model
 ```{r}
-
 set.seed(1)
 rf2.final.imp <- ranger(price.new~., housing,
                         mtry = 2, splitrule = "gini",
@@ -352,7 +364,7 @@ confusionMatrix(data = as.factor(gbmB.pred),
 summary(gbmB.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 ```
 
-The top three important variable are `grade`, `sqft_above`, and `sqft_living15`.  
+The top three important variable arel.  
 
 ### AdaBoost
 

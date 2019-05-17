@@ -48,7 +48,7 @@ x <- model.matrix(price~.,housing)[,-1]
 #### Linear model
 ```{r least square model using caret package}
 # build a least-square linear model
-ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
+ctrl1 = trainControl(method = "repeatedcv", number = 10)
 set.seed(1)
 
 # stepwise elimination to select variables
