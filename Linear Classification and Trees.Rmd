@@ -102,7 +102,6 @@ pred.glmn = predict(model.glmn, newdata = housing[-rowTrain, 2:13], type = "prob
 
 # Discriminant Analysis
 ```{r LDA using caret}
-library(MASS)
 set.seed(1)
 model.lda = train(x = housing[rowTrain, 2:12],
                   y = housing$price.new[rowTrain],
@@ -145,11 +144,13 @@ ggplot(model.knn) + theme_bw()
 pred.knn = predict(model.knn, newdata = housing[-rowTrain, 2:13], type = "prob")
 ```
 
-```{r Naive Bayes using caret}
+```{r Naive Bayes using caret, message=FALSE, warning=FALSE}
 set.seed(1)
-nbGrid = expand.grid(usekernel = c(F, T),
-                     fL = 1,
+nbGrid = expand.grid(usekernel = c(FALSE, TRUE),
+                     fL = 0,
                      adjust = seq(0, 5, by = 1))
+housing = na.omit(housing)
+
 model.nb = train(x = housing[rowTrain, 2:12],
                  y = housing$price.new[rowTrain],
                  method = "nb",
