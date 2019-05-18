@@ -235,6 +235,7 @@ rpart2.fit = train(price~., housing,
                    trControl = ctrl1)
 ggplot(rpart2.fit, highlight = T) + theme_bw()
 rpart.plot(rpart2.fit$finalModel)
+rpart2.fit$finalModel$cptable
 ```
 
 ```{r conditional inference tree}

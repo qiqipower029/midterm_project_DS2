@@ -30,18 +30,23 @@ str(rawdata)
 housing = 
   rawdata %>% 
   select(-id, -date, -zipcode, -lat, -long) %>% 
-  mutate(price = (price^0.02-1)/0.02) %>% 
-  filter(view > 0 & bedrooms <30) %>% 
+  filter(view > 0, bedrooms <30) %>% 
   mutate(basement = ifelse(sqft_basement == 0, 0, 1),
          renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
-  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot) 
+  filter(basement > 0) %>% 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
+
+
+# create training data and testing data.
+rowTrain <- createDataPartition(y = housing$price, 
+                                p=0.8, list = FALSE)
 ```
 
 
 ```{r}
 # vector of response
-y <- housing$price
-x <- model.matrix(price~.,housing)[,-1]
+y <- housing$price[rowTrain]
+x <- model.matrix(price~.,housing)[rowTrain,-1]
 ```
 
 # Model Building
@@ -109,5 +114,15 @@ set.seed(1)
 resamp = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls))
 summary(resamp)
 bwplot(resamp, metric = "RMSE")
+```
+
+### Test Performance
+```{r compare RMSE in test dataset}
+# linear regression
+mean((predict(model_ls, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
+# ridge
+mean((predict(ridge.fit, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
+# lasso
+mean((predict(lasso.fit, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
 ```
 
