@@ -175,10 +175,10 @@ col1 <- colorRampPalette(brewer.pal(9, "GnBu"))(100)
 col2 <- colorRampPalette(brewer.pal(3, "Spectral"))(2)
 
 # now try to reduce the number of clusters
-heatmap.2(t(housing1), 
+gplots::heatmap.2(t(housing1), 
           col = col1, keysize=.8, key.par = list(cex=.5),
           trace = "none", key = TRUE, cexCol = 0.75, 
-          labCol = as.character(housing[,12]),
+          #labCol = as.character(housing[,12]),
           ColSideColors = col2[as.numeric(housing[,"price.new"])],
           margins = c(10, 10)) #high =1=orange, low =2= green
 ```
@@ -362,7 +362,7 @@ confusionMatrix(data = as.factor(gbmB.pred),
 
 #Variable importance
 summary(gbmB.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
-```
+$```
 
 The top three important variable arel.  
 
@@ -416,7 +416,7 @@ resamp.tree <- resamples(list(rf = rf.fit,
                          gbmB = gbmB.fit,
                          rpart = rpart.fit,
                          ctree = ctree.fit))
-bwplot(resamp.tree, metric = "ROC")
+summary(resamp.tree, metric = "ROC")
 ```
 
 

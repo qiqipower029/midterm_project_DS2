@@ -63,7 +63,7 @@ gam.fit.caret <- train(x, y,
 
 gam.fit.caret$finalModelx
 
-summary(gam.fit.caret$finalModel)
+coef(gam.fit.caret$finalModel)
 ```
 
 
@@ -116,11 +116,11 @@ bwplot(resamples(list(mars = mars.fit,
 ## Loading Linear Regression.Rmd before runing this code chunk.
 ##############################################################
 
-#set.seed(1)
-#resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
-#                        mars = mars.fit, gam = gam.fit.caret))
-#summary(resamp.all)
-#bwplot(resamp.all, metric = "RMSE",  ylab = "Models")
+set.seed(1)
+resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
+                        mars = mars.fit, gam = gam.fit.caret))
+summary(resamp.all)
+bwplot(resamp.all, metric = "RMSE",  ylab = "Models")
 ```
 
 # Test data performance
@@ -130,4 +130,3 @@ mean((predict(gam.fit.caret, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2
 # MARS
 mean((predict(mars.fit, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
 ```
-
