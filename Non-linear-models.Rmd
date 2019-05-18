@@ -1,0 +1,133 @@
+---
+title: "Non-Linear models"
+author: "Jiayi Shen"
+date: "4/7/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mgcv)
+library(caret) #featurePlot
+library(plotmo)
+```
+
+# Load and tidy data
+```{r}
+#read data
+rawdata <- read.csv("kc_house_data.csv", header = TRUE)
+
+#inspect the structure of data
+str(rawdata)
+```
+
+  `id`, `date`, `zipcode`, `lat`, `long` can be removed from the dataframe.   
+  The cleaned dataset to be used in this project include one response variable `price` and additional 15 variables.  
+  `view`, `sqft_basement` and `yr_renovated` are continuous or integer variables in the original dataset. For the purpose of easy interpretation in later modelling, we convert these variables to be binary. Then these variables indicate whether the house has been viewed by potential buyers, whether the house has basement or not and whether the house has been renovated or not, respectively.  
+
+
+```{r}
+#clean the rawdata; create a tidied dataset for analysis and modelling.
+#subset data: only those with view >0 and basement >0.
+housing = 
+  rawdata %>% 
+  select(-id, -date, -zipcode, -lat, -long) %>% 
+  filter(view > 0, bedrooms <30) %>% 
+  mutate(basement = ifelse(sqft_basement == 0, 0, 1),
+         renovated = ifelse(yr_renovated == 0, 0, 1)) %>% 
+  filter(basement > 0) %>% 
+  select(-sqft_basement, -yr_renovated, -view, - sqft_living, -sqft_lot, -basement) 
+
+
+# create training data and testing data.
+rowTrain <- createDataPartition(y = housing$price, 
+                                p=0.8, list = FALSE)
+```
+# Non-linear models
+
+## GAM using `caret`
+```{r GAM using caret}
+# vector of response
+y <- housing[rowTrain,]$price
+x <- model.matrix(price~.,housing[rowTrain,])[,-1]
+
+ctrl1 = trainControl(method = "cv", number = 10)
+
+set.seed(1)
+gam.fit.caret <- train(x, y,
+                 method = "gam",
+                 tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
+                 preProcess = c("center", "scale"),
+                 trControl = ctrl1)
+
+gam.fit.caret$finalModelx
+
+summary(gam.fit.caret$finalModel)
+```
+
+
+```{r pdp}
+plotmo(gam.fit.caret, pmethod = "partdep",pt.col = "#ffbb99", level = .95,
+       caption = "Partial Dependence Plots of GAM")
+```
+
+
+## Multivariate Adaptive Regression Splines (MARS)
+We next create a piecewise linear model using multivariate adaptive regression splines (MARS).  
+The MARS model building procedure automatically selects which variables to use (some variables are important, others not), the positions of the kinks in the hinge functions, and how the hinge functions are combined.  
+  
+```{r MARS}
+library(pdp)
+library(earth)
+
+# grid search for optimal hyperparameters
+# 2 tuning parameters in MARS: the degree of interactions and the number of retained terms
+mars_grid <- expand.grid(degree = 1:2, 
+                         nprune = 2:30)
+
+set.seed(1)
+mars.fit <- train(x, y,
+                 method = "earth",
+                 tuneGrid = mars_grid,
+                 preProcess = c("center", "scale"),
+                 trControl = ctrl1)
+summary(mars.fit$finalModel) 
+varImp(mars.fit, value = "gcv")
+```
+
+
+Partial dependence plots (PDPs)
+```{r Partial dependence plots}
+plotmo(mars.fit, pmethod = "partdep",pt.col = "#99c2ff",
+       caption = "Partial Dependence Plots of MARS")
+```
+
+
+```{r comparison between non-linear models, include = FALSE}
+bwplot(resamples(list(mars = mars.fit,
+                      gam = gam.fit.caret)), 
+       metric = "RMSE")
+
+```
+
+```{r comparison between all models, include=FALSE, error=TRUE}
+##############################################################
+## Loading Linear Regression.Rmd before runing this code chunk.
+##############################################################
+
+#set.seed(1)
+#resamp.all = resamples(list(lasso = lasso.fit, ridge = ridge.fit, lm = model_ls,
+#                        mars = mars.fit, gam = gam.fit.caret))
+#summary(resamp.all)
+#bwplot(resamp.all, metric = "RMSE",  ylab = "Models")
+```
+
+# Test data performance
+```{r}
+# GAM
+mean((predict(gam.fit.caret, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
+# MARS
+mean((predict(mars.fit, housing[-rowTrain,]) - housing[-rowTrain,]$price)^2)
+```
+
